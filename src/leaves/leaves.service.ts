@@ -50,7 +50,6 @@ import {
             },
           });
       
-          // Email to HR / Manager
           await this.mailService.sendLeaveRequestToApprover({
             employeeName: leave.user.name,
             employeeEmail: leave.user.email,
@@ -65,15 +64,34 @@ import {
         }
       
         // ==========================
-        // GET PENDING LEAVES (EMPLOYER)
+        // EMPLOYEE LEAVE HISTORY
+        // ==========================
+        async getEmployeeLeaveHistory(userId: string) {
+          return this.prisma.leave.findMany({
+            where: { userId },
+            select: {
+              id: true,
+              type: true,
+              reason: true,
+              fromDate: true,
+              toDate: true,
+              status: true,
+              createdAt: true,
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          });
+        }
+      
+        // ==========================
+        // EMPLOYER – PENDING LEAVES
         // ==========================
         async getPendingLeaves() {
           return this.prisma.leave.findMany({
             where: {
               status: LeaveStatus.PENDING,
-              user: {
-                isActive: true,
-              },
+              user: { isActive: true },
             },
             include: {
               user: {
@@ -92,9 +110,9 @@ import {
         }
       
         // ==========================
-        // APPROVE LEAVE (EMPLOYER UI)
+        // EMPLOYER – APPROVE (UI)
         // ==========================
-        async approveLeaveById(leaveId: string, decidedBy: string) {
+        async approveLeaveById(leaveId: string) {
           const leave = await this.prisma.leave.findUnique({
             where: { id: leaveId },
             include: { user: true },
@@ -108,7 +126,7 @@ import {
             where: { id: leaveId },
             data: {
               status: LeaveStatus.APPROVED,
-              decidedBy,
+              decidedBy: 'EMPLOYER_UI',
               approvalToken: null,
             },
           });
@@ -123,9 +141,9 @@ import {
         }
       
         // ==========================
-        // REJECT LEAVE (EMPLOYER UI)
+        // EMPLOYER – REJECT (UI)
         // ==========================
-        async rejectLeaveById(leaveId: string, decidedBy: string) {
+        async rejectLeaveById(leaveId: string) {
           const leave = await this.prisma.leave.findUnique({
             where: { id: leaveId },
             include: { user: true },
@@ -139,7 +157,7 @@ import {
             where: { id: leaveId },
             data: {
               status: LeaveStatus.REJECTED,
-              decidedBy,
+              decidedBy: 'EMPLOYER_UI',
               approvalToken: null,
             },
           });
@@ -154,7 +172,7 @@ import {
         }
       
         // ==========================
-        // APPROVE LEAVE (EMAIL LINK)
+        // APPROVE VIA EMAIL LINK
         // ==========================
         async approveLeaveByToken(token: string) {
           const leave = await this.prisma.leave.findUnique({
@@ -185,7 +203,7 @@ import {
         }
       
         // ==========================
-        // REJECT LEAVE (EMAIL LINK)
+        // REJECT VIA EMAIL LINK
         // ==========================
         async rejectLeaveByToken(token: string) {
           const leave = await this.prisma.leave.findUnique({
@@ -216,7 +234,7 @@ import {
         }
       
         // ==========================
-        // CALENDAR VIEW — LEAVES BY DATE
+        // EMPLOYER – CALENDAR BY DATE
         // ==========================
         async getLeavesByDate(date: string) {
           const selectedDate = new Date(date);
@@ -226,9 +244,7 @@ import {
               status: LeaveStatus.APPROVED,
               fromDate: { lte: selectedDate },
               toDate: { gte: selectedDate },
-              user: {
-                isActive: true,
-              },
+              user: { isActive: true },
             },
             select: {
               id: true,
@@ -247,6 +263,37 @@ import {
             },
             orderBy: {
               fromDate: 'asc',
+            },
+          });
+        }
+      
+        // ==========================
+        // EMPLOYER – FULL LEAVE HISTORY
+        // ==========================
+        async getAllLeaveHistory() {
+          return this.prisma.leave.findMany({
+            where: {
+              user: { isActive: true },
+            },
+            select: {
+              id: true,
+              type: true,
+              reason: true,
+              fromDate: true,
+              toDate: true,
+              status: true,
+              createdAt: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  jobRole: true,
+                },
+              },
+            },
+            orderBy: {
+              fromDate: 'desc',
             },
           });
         }

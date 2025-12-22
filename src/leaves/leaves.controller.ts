@@ -16,7 +16,7 @@ import {
       export class LeavesController {
         constructor(private readonly leavesService: LeavesService) {}
       
-        // APPLY LEAVE (EMPLOYEE)
+        // EMPLOYEE – APPLY LEAVE
         @Post('apply')
         applyLeave(@Req() req, @Body() body) {
           return this.leavesService.applyLeave(
@@ -28,40 +28,54 @@ import {
           );
         }
       
-        // GET PENDING LEAVES (EMPLOYER)
+        // EMPLOYEE – LEAVE HISTORY
+        @Get('history')
+        getEmployeeHistory(@Req() req) {
+          return this.leavesService.getEmployeeLeaveHistory(
+            req.user.userId,
+          );
+        }
+      
+        // EMPLOYER – PENDING LEAVES
         @Get('pending')
         getPendingLeaves() {
           return this.leavesService.getPendingLeaves();
         }
       
-        // APPROVE LEAVE (EMPLOYER UI)
+        // EMPLOYER – APPROVE (UI)
         @Post('approve/:id')
         approveLeave(@Param('id') id: string) {
-          return this.leavesService.approveLeaveById(id, 'EMPLOYER_UI');
+          return this.leavesService.approveLeaveById(id);
         }
       
-        // REJECT LEAVE (EMPLOYER UI)
+        // EMPLOYER – REJECT (UI)
         @Post('reject/:id')
         rejectLeave(@Param('id') id: string) {
-          return this.leavesService.rejectLeaveById(id, 'EMPLOYER_UI');
+          return this.leavesService.rejectLeaveById(id);
         }
       
-        // APPROVE LEAVE (EMAIL LINK)
+        // APPROVE VIA EMAIL
         @Get('approve')
         approveByEmail(@Query('token') token: string) {
           return this.leavesService.approveLeaveByToken(token);
         }
       
-        // REJECT LEAVE (EMAIL LINK)
+        // REJECT VIA EMAIL
         @Get('reject')
         rejectByEmail(@Query('token') token: string) {
           return this.leavesService.rejectLeaveByToken(token);
         }
       
-        // CALENDAR — LEAVES BY DATE
+        // EMPLOYER – CALENDAR VIEW
         @Get('by-date')
         getLeavesByDate(@Query('date') date: string) {
           return this.leavesService.getLeavesByDate(date);
+        }
+      
+        // EMPLOYER – FULL LEAVE HISTORY
+        @Get('history/all')
+        getAllLeaveHistory() {
+          return this.leavesService.getAllLeaveHistory();
         }
       }
       

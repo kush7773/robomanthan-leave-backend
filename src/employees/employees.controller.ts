@@ -1,7 +1,7 @@
 import {
         Controller,
-        Post,
         Get,
+        Post,
         Put,
         Delete,
         Body,
@@ -14,11 +14,13 @@ import {
       @Controller('employees')
       @UseGuards(JwtAuthGuard)
       export class EmployeesController {
-        constructor(private readonly employeesService: EmployeesService) {}
+        constructor(
+          private readonly employeesService: EmployeesService,
+        ) {}
       
         // ADD EMPLOYEE
         @Post()
-        create(@Body() body) {
+        createEmployee(@Body() body) {
           return this.employeesService.createEmployee(
             body.name,
             body.email,
@@ -27,15 +29,30 @@ import {
           );
         }
       
-        // LIST ACTIVE EMPLOYEES
+        // LIST EMPLOYEES
         @Get()
-        list() {
-          return this.employeesService.listEmployees();
+        getAllEmployees() {
+          return this.employeesService.getAllEmployees();
         }
       
-        // EDIT EMPLOYEE (EMPLOYER)
+        // VIEW EMPLOYEE DETAILS
+        @Get(':id')
+        getEmployee(@Param('id') id: string) {
+          return this.employeesService.getEmployeeById(id);
+        }
+      
+        // VIEW EMPLOYEE LEAVE HISTORY
+        @Get(':id/leaves')
+        getEmployeeLeaves(@Param('id') id: string) {
+          return this.employeesService.getEmployeeLeaveHistory(id);
+        }
+      
+        // UPDATE EMPLOYEE
         @Put(':id')
-        update(@Param('id') id: string, @Body() body) {
+        updateEmployee(
+          @Param('id') id: string,
+          @Body() body,
+        ) {
           return this.employeesService.updateEmployee(
             id,
             body.jobRole,
@@ -45,8 +62,8 @@ import {
       
         // SOFT DELETE EMPLOYEE
         @Delete(':id')
-        delete(@Param('id') id: string) {
-          return this.employeesService.softDeleteEmployee(id);
+        deleteEmployee(@Param('id') id: string) {
+          return this.employeesService.deleteEmployee(id);
         }
       }
       
