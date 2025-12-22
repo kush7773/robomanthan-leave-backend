@@ -1,0 +1,11 @@
+ALTER TABLE "Leave"
+ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW();
+
+ALTER TABLE "LeaveBalance"
+ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW();
+
+ALTER TABLE "User"
+ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW();
+
+CREATE UNIQUE INDEX "LeaveBalance_userId_type_key"
+ON "LeaveBalance"("userId", "type");
