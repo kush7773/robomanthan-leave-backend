@@ -1,72 +1,61 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role } from '@prisma/client';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // ==========================
-  // EMPLOYER DASHBOARD
-  // ==========================
+  private getCurrentYear(): number {
+    return new Date().getFullYear();
+  }
+
+  async getEmployeeDashboard(userId: string) {
+    const year = this.getCurrentYear();
+
+    const balances = await this.prisma.leaveBalance.findMany({
+      where: {
+        userId,
+        year,
+      },
+    });
+
+    const recentLeaves = await this.prisma.leave.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+
+    return {
+      year,
+      balances,
+      recentLeaves,
+    };
+  }
+
   async getEmployerDashboard() {
+    const year = this.getCurrentYear();
+
     const employeesCount = await this.prisma.user.count({
-      where: { role: Role.EMPLOYEE },
+      where: { isActive: true },
     });
 
     const pendingLeaves = await this.prisma.leave.count({
       where: { status: 'PENDING' },
     });
 
-    const recentLeaves = await this.prisma.leave.findMany({
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-          },
+    const leavesThisYear = await this.prisma.leave.count({
+      where: {
+        fromDate: {
+          gte: new Date(`${year}-01-01`),
         },
       },
     });
 
     return {
+      year,
       employeesCount,
       pendingLeaves,
-      recentLeaves,
-    };
-  }
-
-  // ==========================
-  // EMPLOYEE DASHBOARD
-  // ==========================
-  async getEmployeeDashboard(userId: string) {
-    const leaveBalances = await this.prisma.leaveBalance.findMany({
-      where: { userId },
-      select: {
-        type: true,
-        total: true,
-        used: true,
-      },
-    });
-
-    const leaves = await this.prisma.leave.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        type: true,
-        status: true,
-        fromDate: true,
-        toDate: true,
-        reason: true,
-      },
-    });
-
-    return {
-      leaveBalances,
-      leaves,
+      leavesThisYear,
     };
   }
 }

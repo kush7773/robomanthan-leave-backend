@@ -73,6 +73,7 @@ model LeaveBalance {
   type  String
   total Int
   used  Int @default(0)
+  year   Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
