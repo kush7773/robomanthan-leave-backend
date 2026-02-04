@@ -1,10 +1,11 @@
 import {
-  Body,
   Controller,
-  Delete,
-  Get,
-  Param,
   Post,
+  Get,
+  Patch,
+  Delete,
+  Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
@@ -14,31 +15,64 @@ import { Roles } from '../common/decorators/roles.decorator';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('EMPLOYER')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
-  // ✅ ADD EMPLOYEE
+  // ============================
+  // CREATE EMPLOYEE (EMPLOYER)
+  // ============================
   @Post()
-  create(@Body() body) {
-    return this.employeesService.createEmployee(body);
+  @Roles('EMPLOYER')
+  createEmployee(@Body() body: any) {
+    const { name, email, jobRole } = body;
+
+    return this.employeesService.createEmployee(
+      name,
+      email,
+      jobRole,
+    );
   }
 
-  // ✅ LIST EMPLOYEES
+  // ============================
+  // LIST ALL EMPLOYEES
+  // ============================
   @Get()
-  getAll() {
+  @Roles('EMPLOYER')
+  getAllEmployees() {
     return this.employeesService.getAllEmployees();
   }
 
-  // ✅ VIEW EMPLOYEE DETAILS + HISTORY
+  // ============================
+  // GET SINGLE EMPLOYEE
+  // ============================
   @Get(':id')
-  getOne(@Param('id') id: string) {
+  @Roles('EMPLOYER')
+  getEmployee(@Param('id') id: string) {
     return this.employeesService.getEmployeeById(id);
   }
 
-  // ✅ SOFT DELETE
+  // ============================
+  // UPDATE EMPLOYEE
+  // ============================
+  @Patch(':id')
+  @Roles('EMPLOYER')
+  updateEmployee(
+    @Param('id') id: string,
+    @Body() body: {
+      name?: string;
+      email?: string;
+      jobRole?: string;
+    },
+  ) {
+    return this.employeesService.updateEmployee(id, body);
+  }
+
+  // ============================
+  // DELETE EMPLOYEE (SOFT)
+  // ============================
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  @Roles('EMPLOYER')
+  deleteEmployee(@Param('id') id: string) {
     return this.employeesService.deleteEmployee(id);
   }
 }
