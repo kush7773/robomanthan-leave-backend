@@ -10,55 +10,65 @@ import {
 } from '@nestjs/common';
 import { LeavesService } from './leaves.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
 
 @Controller('leaves')
 @UseGuards(JwtAuthGuard)
 export class LeavesController {
   constructor(private readonly leavesService: LeavesService) {}
 
-  // ✅ EMPLOYEE APPLY LEAVE
+  // =========================
+  // APPLY LEAVE
+  // =========================
   @Post('apply')
-  apply(@Req() req, @Body() body) {
-    return this.leavesService.applyLeave(req.user.userId, body);
+  applyLeave(@Req() req, @Body() body) {
+    return this.leavesService.applyLeave(
+      req.user.userId,
+      body.type,
+      body.reason,
+      new Date(body.fromDate),
+      new Date(body.toDate),
+    );
   }
 
-  // ✅ EMPLOYEE LEAVE HISTORY
+  // =========================
+  // EMPLOYEE LEAVE HISTORY
+  // =========================
   @Get('my')
-  myLeaves(@Req() req) {
+  getMyLeaves(@Req() req) {
     return this.leavesService.getEmployeeLeaveHistory(req.user.userId);
   }
 
-  // ✅ EMPLOYER: PENDING LEAVES
+  // =========================
+  // PENDING LEAVES
+  // =========================
   @Get('pending')
-  @UseGuards(RolesGuard)
-  @Roles('EMPLOYER')
-  pending() {
+  getPendingLeaves() {
     return this.leavesService.getPendingLeaves();
   }
 
-  // ✅ EMPLOYER APPROVE
-  @Post(':id/approve')
-  @UseGuards(RolesGuard)
-  @Roles('EMPLOYER')
+  // =========================
+  // APPROVE / REJECT (UI)
+  // =========================
+  @Post('approve/:id')
   approve(@Param('id') id: string) {
     return this.leavesService.approveLeaveById(id);
   }
 
-  // ✅ EMPLOYER REJECT
-  @Post(':id/reject')
-  @UseGuards(RolesGuard)
-  @Roles('EMPLOYER')
+  @Post('reject/:id')
   reject(@Param('id') id: string) {
     return this.leavesService.rejectLeaveById(id);
   }
 
-  // ✅ CALENDAR VIEW
-  @Get('by-date')
-  @UseGuards(RolesGuard)
-  @Roles('EMPLOYER')
-  byDate(@Query('date') date: string) {
-    return this.leavesService.getLeavesByDate(date);
+  // =========================
+  // APPROVE / REJECT (EMAIL)
+  // =========================
+  @Get('approve')
+  approveByToken(@Query('token') token: string) {
+    return this.leavesService.approveLeaveByToken(token);
+  }
+
+  @Get('reject')
+  rejectByToken(@Query('token') token: string) {
+    return this.leavesService.rejectLeaveByToken(token);
   }
 }

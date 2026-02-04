@@ -1,81 +1,60 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { LeaveStatus } from '@prisma/client';
+import { v4 as uuid } from 'uuid';
 
 @Injectable()
 export class LeavesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService,
+  ) {}
 
-  private getCurrentYear() {
-    return new Date().getFullYear();
-  }
-
-  private calculateDays(from: Date, to: Date): number {
-    return (
-      Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1
-    );
-  }
-
-  private async getOrCreateBalance(userId: string, type: string) {
-    const year = this.getCurrentYear();
-
-    let balance = await this.prisma.leaveBalance.findFirst({
-      where: { userId, type, year },
-    });
-
-    if (!balance) {
-      balance = await this.prisma.leaveBalance.create({
-        data: {
-          userId,
-          type,
-          year,
-          total: 20,
-          used: 0,
-        },
-      });
-    }
-
-    return balance;
-  }
-
-  async applyLeave(userId: string, body: any) {
-    const fromDate = new Date(body.fromDate);
-    const toDate = new Date(body.toDate);
-
-    if (fromDate > toDate) {
-      throw new BadRequestException('Invalid date range');
-    }
-
-    const days = this.calculateDays(fromDate, toDate);
-
-    const balance = await this.getOrCreateBalance(userId, body.type);
-
-    if (balance.used + days > balance.total) {
-      throw new BadRequestException('Insufficient leave balance');
-    }
+  // =========================
+  // APPLY LEAVE (EMPLOYEE)
+  // =========================
+  async applyLeave(
+    userId: string,
+    type: string,
+    reason: string,
+    fromDate: Date,
+    toDate: Date,
+  ) {
+    const approvalToken = uuid();
 
     const leave = await this.prisma.leave.create({
       data: {
         userId,
-        type: body.type,
-        reason: body.reason,
+        type,
+        reason,
         fromDate,
         toDate,
-        status: 'PENDING',
+        status: LeaveStatus.PENDING,
+        approvalToken,
+      },
+      include: {
+        user: true,
       },
     });
 
-    await this.prisma.leaveBalance.update({
-      where: { id: balance.id },
-      data: { used: balance.used + days },
+    // email to employer
+    await this.mailService.sendLeaveRequestToApprover({
+      employeeName: leave.user.name,
+      employeeEmail: leave.user.email,
+      type: leave.type,
+      fromDate: leave.fromDate,
+      toDate: leave.toDate,
+      reason: leave.reason,
+      approvalToken,
     });
 
-    return { message: 'Leave applied successfully', leaveId: leave.id };
+    return { message: 'Leave applied successfully' };
   }
 
+  // =========================
+  // EMPLOYEE LEAVE HISTORY
+  // =========================
   async getEmployeeLeaveHistory(userId: string) {
     return this.prisma.leave.findMany({
       where: { userId },
@@ -83,66 +62,77 @@ export class LeavesService {
     });
   }
 
+  // =========================
+  // PENDING LEAVES (EMPLOYER)
+  // =========================
   async getPendingLeaves() {
     return this.prisma.leave.findMany({
-      where: { status: 'PENDING' },
-      include: {
-        user: {
-          select: { name: true, email: true, jobRole: true },
-        },
+      where: { status: LeaveStatus.PENDING },
+      include: { user: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // =========================
+  // APPROVE (EMPLOYER UI)
+  // =========================
+  async approveLeaveById(id: string) {
+    const leave = await this.prisma.leave.findUnique({ where: { id } });
+    if (!leave) throw new NotFoundException('Leave not found');
+
+    return this.prisma.leave.update({
+      where: { id },
+      data: { status: LeaveStatus.APPROVED },
+    });
+  }
+
+  // =========================
+  // REJECT (EMPLOYER UI)
+  // =========================
+  async rejectLeaveById(id: string) {
+    const leave = await this.prisma.leave.findUnique({ where: { id } });
+    if (!leave) throw new NotFoundException('Leave not found');
+
+    return this.prisma.leave.update({
+      where: { id },
+      data: { status: LeaveStatus.REJECTED },
+    });
+  }
+
+  // =========================
+  // APPROVE VIA EMAIL LINK
+  // =========================
+  async approveLeaveByToken(token: string) {
+    const leave = await this.prisma.leave.findFirst({
+      where: { approvalToken: token },
+    });
+
+    if (!leave) throw new NotFoundException('Invalid token');
+
+    return this.prisma.leave.update({
+      where: { id: leave.id },
+      data: {
+        status: LeaveStatus.APPROVED,
+        approvalToken: null,
       },
     });
   }
 
-  async approveLeaveById(leaveId: string) {
-    const leave = await this.prisma.leave.findUnique({ where: { id: leaveId } });
-    if (!leave) throw new NotFoundException('Leave not found');
-
-    await this.prisma.leave.update({
-      where: { id: leaveId },
-      data: { status: 'APPROVED' },
+  // =========================
+  // REJECT VIA EMAIL LINK
+  // =========================
+  async rejectLeaveByToken(token: string) {
+    const leave = await this.prisma.leave.findFirst({
+      where: { approvalToken: token },
     });
 
-    return { message: 'Leave approved' };
-  }
+    if (!leave) throw new NotFoundException('Invalid token');
 
-  async rejectLeaveById(leaveId: string) {
-    const leave = await this.prisma.leave.findUnique({ where: { id: leaveId } });
-    if (!leave) throw new NotFoundException('Leave not found');
-
-    const days = this.calculateDays(leave.fromDate, leave.toDate);
-    const year = leave.fromDate.getFullYear();
-
-    const balance = await this.prisma.leaveBalance.findFirst({
-      where: { userId: leave.userId, type: leave.type, year },
-    });
-
-    if (balance) {
-      await this.prisma.leaveBalance.update({
-        where: { id: balance.id },
-        data: { used: Math.max(balance.used - days, 0) },
-      });
-    }
-
-    await this.prisma.leave.update({
-      where: { id: leaveId },
-      data: { status: 'REJECTED' },
-    });
-
-    return { message: 'Leave rejected' };
-  }
-
-  async getLeavesByDate(date: string) {
-    const target = new Date(date);
-
-    return this.prisma.leave.findMany({
-      where: {
-        fromDate: { lte: target },
-        toDate: { gte: target },
-        status: 'APPROVED',
-      },
-      include: {
-        user: { select: { name: true, email: true, jobRole: true } },
+    return this.prisma.leave.update({
+      where: { id: leave.id },
+      data: {
+        status: LeaveStatus.REJECTED,
+        approvalToken: null,
       },
     });
   }
