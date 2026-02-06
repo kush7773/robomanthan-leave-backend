@@ -3,40 +3,13 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private getCurrentYear(): number {
-    return new Date().getFullYear();
-  }
-
-  async getEmployeeDashboard(userId: string) {
-    const year = this.getCurrentYear();
-
-    const balances = await this.prisma.leaveBalance.findMany({
-      where: {
-        userId,
-        year,
-      },
-    });
-
-    const recentLeaves = await this.prisma.leave.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-
-    return {
-      year,
-      balances,
-      recentLeaves,
-    };
-  }
+  constructor(private prisma: PrismaService) {}
 
   async getEmployerDashboard() {
-    const year = this.getCurrentYear();
+    const year = new Date().getFullYear();
 
     const employeesCount = await this.prisma.user.count({
-      where: { isActive: true },
+      where: { role: 'EMPLOYEE', isActive: true },
     });
 
     const pendingLeaves = await this.prisma.leave.count({

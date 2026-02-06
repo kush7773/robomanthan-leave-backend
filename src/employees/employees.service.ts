@@ -1,47 +1,43 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
-import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class EmployeesService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly mailService: MailService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  // ============================
+  // ==============================
   // CREATE EMPLOYEE (EMPLOYER)
-  // ============================
-  async createEmployee(
-    name: string,
-    email: string,
-    jobRole: string,
-  ) {
-    // check duplicate
+  // ==============================
+  async createEmployee(data: {
+    name: string;
+    email: string;
+    password: string;
+    jobRole?: string;
+    phone?: string;
+  }) {
     const existing = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: data.email },
     });
 
     if (existing) {
       throw new BadRequestException('Employee already exists');
     }
 
-    // generate password
-    const rawPassword = randomBytes(6).toString('hex'); // e.g. a1b2c3
+    if (!data.password) {
+      throw new BadRequestException('Password is required');
+    }
 
-    // hash password
-    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+    const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // create employee
-    const employee = await this.prisma.user.create({
+    return this.prisma.user.create({
       data: {
-        name,
-        email,
+        name: data.name,
+        email: data.email,
         password: hashedPassword,
         role: 'EMPLOYEE',
-        jobRole,
+        jobRole: data.jobRole || null,
+        phone: data.phone || null,
         isActive: true,
       },
       select: {
@@ -49,101 +45,111 @@ export class EmployeesService {
         name: true,
         email: true,
         jobRole: true,
-        role: true,
+        phone: true,
         isActive: true,
         createdAt: true,
       },
     });
-
-    // send credentials
-    await this.mailService.sendEmployeeCredentials(
-      email,
-      rawPassword,
-    );
-
-    return {
-      message: 'Employee created successfully',
-      employee,
-    };
   }
 
-  // ============================
-  // LIST ALL EMPLOYEES (EMPLOYER)
-  // ============================
+  // ==============================
+  // GET ALL EMPLOYEES (EMPLOYER)
+  // ==============================
   async getAllEmployees() {
     return this.prisma.user.findMany({
       where: {
         role: 'EMPLOYEE',
         isActive: true,
       },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
         jobRole: true,
         createdAt: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
       },
     });
   }
 
-  // ============================
-  // GET SINGLE EMPLOYEE + HISTORY
-  // ============================
-  async getEmployeeById(employeeId: string) {
-    return this.prisma.user.findUnique({
-      where: { id: employeeId },
+  // ==============================
+  // GET EMPLOYEE BY ID
+  // ==============================
+  async getEmployeeById(id: string) {
+    const employee = await this.prisma.user.findUnique({
+      where: { id },
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
         jobRole: true,
+        isActive: true,
         createdAt: true,
-        leaves: {
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
       },
     });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    return employee;
   }
 
-  // ============================
+  // ==============================
   // UPDATE EMPLOYEE (EMPLOYER)
-  // ============================
+  // ==============================
   async updateEmployee(
-    employeeId: string,
+    id: string,
     data: {
       name?: string;
-      email?: string;
+      phone?: string;
       jobRole?: string;
     },
   ) {
+    const employee = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!employee || employee.role !== 'EMPLOYEE') {
+      throw new NotFoundException('Employee not found');
+    }
+
     return this.prisma.user.update({
-      where: { id: employeeId },
-      data,
+      where: { id },
+      data: {
+        name: data.name ?? employee.name,
+        phone: data.phone ?? employee.phone,
+        jobRole: data.jobRole ?? employee.jobRole,
+      },
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
         jobRole: true,
       },
     });
   }
 
-  // ============================
-  // SOFT DELETE EMPLOYEE
-  // ============================
-  async deleteEmployee(employeeId: string) {
-    await this.prisma.user.update({
-      where: { id: employeeId },
+  // ==============================
+  // DELETE EMPLOYEE (SOFT DELETE)
+  // ==============================
+  async deleteEmployee(id: string) {
+    const employee = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!employee || employee.role !== 'EMPLOYEE') {
+      throw new NotFoundException('Employee not found');
+    }
+
+    return this.prisma.user.update({
+      where: { id },
       data: {
         isActive: false,
       },
     });
-
-    return { message: 'Employee deleted successfully' };
   }
 }
