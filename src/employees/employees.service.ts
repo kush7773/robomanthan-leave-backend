@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   // ==============================
   // CREATE EMPLOYEE (EMPLOYER)
@@ -30,7 +30,8 @@ export class EmployeesService {
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    return this.prisma.user.create({
+    const currentYear = new Date().getFullYear();
+    const employee = await this.prisma.user.create({
       data: {
         name: data.name,
         email: data.email,
@@ -50,6 +51,24 @@ export class EmployeesService {
         createdAt: true,
       },
     });
+
+    // Initialize leave balances for common leave types
+    const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave'];
+    await Promise.all(
+      leaveTypes.map(type =>
+        this.prisma.leaveBalance.create({
+          data: {
+            userId: employee.id,
+            type,
+            total: 20, // Default 20 days per leave type per year
+            used: 0,
+            year: currentYear,
+          },
+        }),
+      ),
+    );
+
+    return employee;
   }
 
   // ==============================

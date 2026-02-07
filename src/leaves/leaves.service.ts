@@ -1,25 +1,38 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { LeaveStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 
 @Injectable()
 export class LeavesService {
   constructor(
-    private prisma: PrismaService,
-    private mailService: MailService,
-  ) {}
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) { }
 
-  // ===============================
+  // ==========================
   // APPLY LEAVE
-  // ===============================
+  // ==========================
   async applyLeave(
     userId: string,
     type: string,
     reason: string,
-    fromDate: Date,
-    toDate: Date,
+    fromDate: string,
+    toDate: string,
   ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new BadRequestException('Employee not found');
+    }
+
     const approvalToken = randomUUID();
 
     const leave = await this.prisma.leave.create({
@@ -27,15 +40,16 @@ export class LeavesService {
         userId,
         type,
         reason,
-        fromDate,
-        toDate,
-        status: 'PENDING',
+        fromDate: new Date(fromDate),
+        toDate: new Date(toDate),
+        status: LeaveStatus.PENDING,
         approvalToken,
       },
       include: { user: true },
     });
 
-    await this.mailService.sendLeaveRequestToEmployer({
+    // FIX 1: Correct method name is 'sendLeaveRequestToApprover'
+    await this.mailService.sendLeaveRequestToApprover({
       employeeName: leave.user.name,
       employeeEmail: leave.user.email,
       type: leave.type,
@@ -45,133 +59,171 @@ export class LeavesService {
       approvalToken,
     });
 
-    return { message: 'Leave applied successfully' };
+    return { message: 'Leave request submitted for approval' };
   }
 
-  // ===============================
-  // PENDING LEAVES
-  // ===============================
-  async getPendingLeaves() {
-    return this.prisma.leave.findMany({
-      where: { status: 'PENDING' },
-      include: { user: { select: { name: true, email: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // ===============================
-  // APPROVE (DASHBOARD)
-  // ===============================
-  async approveById(leaveId: string, employerId?: string) {
+  // ==========================
+  // INTERNAL APPROVAL LOGIC
+  // ==========================
+  private async approveLeaveInternal(
+    leaveId: string,
+    decidedBy: 'EMPLOYER_UI' | 'EMAIL',
+  ) {
     const leave = await this.prisma.leave.findUnique({
       where: { id: leaveId },
       include: { user: true },
     });
 
-    if (!leave) throw new NotFoundException('Leave not found');
+    if (!leave || leave.status !== LeaveStatus.PENDING) {
+      throw new NotFoundException('Leave not found or already decided');
+    }
+
+    const days =
+      Math.ceil(
+        (leave.toDate.getTime() - leave.fromDate.getTime()) /
+        (1000 * 60 * 60 * 24),
+      ) + 1;
 
     await this.prisma.leave.update({
-      where: { id: leaveId },
+      where: { id: leave.id },
       data: {
-        status: 'APPROVED',
-        decidedBy: employerId ?? null,
+        status: LeaveStatus.APPROVED,
+        decidedBy,
         approvalToken: null,
       },
     });
 
+    // Update or create leave balance (upsert to handle missing records)
+    const currentYear = new Date().getFullYear();
+    await this.prisma.leaveBalance.upsert({
+      where: {
+        userId_type: {
+          userId: leave.userId,
+          type: leave.type,
+        },
+      },
+      update: {
+        used: {
+          increment: days,
+        },
+      },
+      create: {
+        userId: leave.userId,
+        type: leave.type,
+        total: 20, // Default total leaves per year
+        used: days,
+        year: currentYear,
+      },
+    });
+
+    // FIX 2: Property must be 'email', not 'employeeEmail'
     await this.mailService.sendLeaveDecisionToEmployee({
-      employeeEmail: leave.user.email,
-      employeeName: leave.user.name,
-      type: leave.type,
-      fromDate: leave.fromDate,
-      toDate: leave.toDate,
+      email: leave.user.email,
+      name: leave.user.name,
       status: 'APPROVED',
     });
 
-    return { message: 'Leave approved' };
+    return { message: 'Leave approved successfully' };
   }
 
-  // ===============================
-  // REJECT (DASHBOARD)
-  // ===============================
-  async rejectById(leaveId: string, employerId?: string) {
+  async approveLeaveById(leaveId: string) {
+    return this.approveLeaveInternal(leaveId, 'EMPLOYER_UI');
+  }
+
+  async approveLeaveByToken(token: string) {
+    const leave = await this.prisma.leave.findUnique({
+      where: { approvalToken: token },
+    });
+
+    if (!leave) {
+      throw new NotFoundException('Invalid or expired token');
+    }
+
+    return this.approveLeaveInternal(leave.id, 'EMAIL');
+  }
+
+  // ==========================
+  // REJECT LEAVE
+  // ==========================
+  async rejectLeaveById(leaveId: string) {
     const leave = await this.prisma.leave.findUnique({
       where: { id: leaveId },
       include: { user: true },
     });
 
-    if (!leave) throw new NotFoundException('Leave not found');
+    if (!leave || leave.status !== LeaveStatus.PENDING) {
+      throw new NotFoundException('Leave not found or already decided');
+    }
 
     await this.prisma.leave.update({
       where: { id: leaveId },
       data: {
-        status: 'REJECTED',
-        decidedBy: employerId ?? null,
+        status: LeaveStatus.REJECTED,
+        decidedBy: 'EMPLOYER_UI',
         approvalToken: null,
       },
     });
 
+    // FIX 3: Property must be 'email', not 'employeeEmail'
     await this.mailService.sendLeaveDecisionToEmployee({
-      employeeEmail: leave.user.email,
-      employeeName: leave.user.name,
-      type: leave.type,
-      fromDate: leave.fromDate,
-      toDate: leave.toDate,
+      email: leave.user.email,
+      name: leave.user.name,
       status: 'REJECTED',
     });
 
-    return { message: 'Leave rejected' };
+    return { message: 'Leave rejected successfully' };
   }
 
-  // ===============================
-  // EMAIL → APPROVE
-  // ===============================
-  async approveByToken(token: string) {
-    const leave = await this.prisma.leave.findFirst({
+  async rejectLeaveByToken(token: string) {
+    const leave = await this.prisma.leave.findUnique({
       where: { approvalToken: token },
       include: { user: true },
     });
 
-    if (!leave) throw new NotFoundException('Invalid token');
+    if (!leave) {
+      throw new NotFoundException('Invalid or expired token');
+    }
 
-    return this.approveById(leave.id);
+    return this.rejectLeaveById(leave.id);
   }
 
-  // ===============================
-  // EMAIL → REJECT
-  // ===============================
-  async rejectByToken(token: string) {
-    const leave = await this.prisma.leave.findFirst({
-      where: { approvalToken: token },
-      include: { user: true },
-    });
-
-    if (!leave) throw new NotFoundException('Invalid token');
-
-    return this.rejectById(leave.id);
-  }
-
-  // ===============================
-  // CALENDAR
-  // ===============================
-  async getLeavesByDate(date: Date) {
-    return this.prisma.leave.findMany({
-      where: {
-        status: 'APPROVED',
-        fromDate: { lte: date },
-        toDate: { gte: date },
-      },
-      include: { user: { select: { name: true } } },
-    });
-  }
-
-  // ===============================
-  // HISTORY
-  // ===============================
-  async getEmployeeHistory(userId: string) {
+  // ==========================
+  // READ-ONLY APIs (SAFE)
+  // ==========================
+  async getEmployeeLeaveHistory(userId: string) {
     return this.prisma.leave.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getPendingLeaves() {
+    return this.prisma.leave.findMany({
+      where: {
+        status: LeaveStatus.PENDING,
+        user: { isActive: true },
+      },
+      include: { user: true },
+    });
+  }
+
+  async getLeavesByDate(date: string) {
+    const d = new Date(date);
+
+    return this.prisma.leave.findMany({
+      where: {
+        status: LeaveStatus.APPROVED,
+        fromDate: { lte: d },
+        toDate: { gte: d },
+      },
+      include: { user: true },
+    });
+  }
+
+  async getAllLeaveHistory() {
+    return this.prisma.leave.findMany({
+      include: { user: true },
+      orderBy: { fromDate: 'desc' },
     });
   }
 }

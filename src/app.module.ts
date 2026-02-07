@@ -10,6 +10,7 @@ import { LeavesModule } from './leaves/leaves.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ProfileModule } from './profile/profile.module';
 import { MailModule } from './mail/mail.module';
+import { ReportsModule } from './reports/reports.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -34,6 +35,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     LeavesModule,
     DashboardModule,
     ProfileModule,
+    ReportsModule,
   ],
 
   providers: [
@@ -48,4 +50,4 @@ import { RolesGuard } from './common/guards/roles.guard';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

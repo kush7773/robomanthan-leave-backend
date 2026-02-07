@@ -1,66 +1,32 @@
-import {
-  Controller,
-  Post,
-  Body,
-  BadRequestException,
-} from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
-  // ======================
-  // LOGIN
-  // ======================
+  @Public()
   @Post('login')
-  async login(
-    @Body() body: { email: string; password: string },
-  ) {
-    const { email, password } = body;
-
-    if (!email || !password) {
-      throw new BadRequestException('Email and password are required');
-    }
-
-    return this.authService.login(email, password);
+  login(@Body() loginDto: LoginDto) { // <--- 2. USE IT HERE
+    // We confirm the data exists, then normalize email
+    return this.authService.login(
+      loginDto.email.toLowerCase(),
+      loginDto.password
+    );
   }
 
-  // ======================
-  // FORGOT PASSWORD
-  // ======================
+  // ... keep your other methods (forgotPassword, etc) ...
+  @Public()
   @Post('forgot-password')
-  async forgotPassword(
-    @Body() body: { email: string },
-  ) {
-    const { email } = body;
-
-    if (!email) {
-      throw new BadRequestException('Email is required');
-    }
-
-    return this.authService.forgotPassword(email);
+  forgotPassword(@Body() body: any) {
+    return this.authService.forgotPassword(body.email);
   }
 
-  // ======================
-  // RESET PASSWORD
-  // ======================
+  @Public()
   @Post('reset-password')
-  async resetPassword(
-    @Body()
-    body: {
-      token: string;
-      newPassword: string;
-    },
-  ) {
-    const { token, newPassword } = body;
-
-    if (!token || !newPassword) {
-      throw new BadRequestException(
-        'Token and new password are required',
-      );
-    }
-
-    return this.authService.resetPassword(token, newPassword);
+  resetPassword(@Body() body: any) {
+    return this.authService.resetPassword(body.token, body.newPassword);
   }
 }

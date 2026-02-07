@@ -1,6 +1,19 @@
+import { IsString, IsNotEmpty, IsDateString } from 'class-validator';
+
 export class ApplyLeaveDto {
-        type: string;
-        reason: string;
-        fromDate: string;
-        toDate: string;
-      }
+  @IsString()
+  @IsNotEmpty()
+  type: string;
+
+  @IsString()
+  @IsNotEmpty()
+  reason: string;
+
+  @IsDateString()
+  @IsNotEmpty()
+  fromDate: string;
+
+  @IsDateString()
+  @IsNotEmpty()
+  toDate: string;
+}

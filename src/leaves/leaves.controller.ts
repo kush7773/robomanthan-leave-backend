@@ -2,97 +2,109 @@ import {
   Controller,
   Post,
   Get,
+  Body,
   Param,
   Query,
-  Body,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { LeavesService } from './leaves.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { ApplyLeaveDto } from './dto/apply-leave.dto';
+import { Public } from '../common/decorators/public.decorator';
 
 @Controller('leaves')
+@UseGuards(JwtAuthGuard)
 export class LeavesController {
-  constructor(private readonly leavesService: LeavesService) {}
+  constructor(private readonly leavesService: LeavesService) { }
 
-  // ===============================
-  // EMPLOYEE → APPLY LEAVE
-  // ===============================
-  @UseGuards(JwtAuthGuard)
+  // ==========================
+  // EMPLOYEE – APPLY LEAVE
+  // ==========================
   @Post('apply')
-  applyLeave(@Req() req, @Body() body) {
+  applyLeave(@Req() req, @Body() body: ApplyLeaveDto) {
+    // FIX: Pass strings directly. Do NOT use new Date() here.
     return this.leavesService.applyLeave(
       req.user.userId,
       body.type,
       body.reason,
-      new Date(body.fromDate),
-      new Date(body.toDate),
+      body.fromDate,
+      body.toDate,
     );
   }
 
-  // ===============================
-  // EMPLOYER → PENDING LEAVES
-  // ===============================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EMPLOYER')
+  // ==========================
+  // EMPLOYEE – LEAVE HISTORY
+  // ==========================
+  @Get('history')
+  getEmployeeHistory(@Req() req) {
+    // FIX: Correct method name is 'getEmployeeLeaveHistory'
+    return this.leavesService.getEmployeeLeaveHistory(
+      req.user.userId,
+    );
+  }
+
+  // ==========================
+  // EMPLOYER – PENDING LEAVES
+  // ==========================
   @Get('pending')
   getPendingLeaves() {
     return this.leavesService.getPendingLeaves();
   }
 
-  // ===============================
-  // EMPLOYER → APPROVE (DASHBOARD)
-  // ===============================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EMPLOYER')
-  @Post('approve/:id')
-  approveById(@Param('id') id: string, @Req() req) {
-    return this.leavesService.approveById(id, req.user.userId);
+  // ==========================
+  // EMPLOYER – APPROVE (UI)
+  // ==========================
+  @Post(':id/approve')
+  approveLeave(@Param('id') id: string) {
+    // FIX: Correct method name is 'approveLeaveById'
+    // FIX: Removed extra argument (Service only takes ID)
+    return this.leavesService.approveLeaveById(id);
   }
 
-  // ===============================
-  // EMPLOYER → REJECT (DASHBOARD)
-  // ===============================
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('EMPLOYER')
-  @Post('reject/:id')
-  rejectById(@Param('id') id: string, @Req() req) {
-    return this.leavesService.rejectById(id, req.user.userId);
+  // ==========================
+  // EMPLOYER – REJECT (UI)
+  // ==========================
+  @Post(':id/reject')
+  rejectLeave(@Param('id') id: string) {
+    // FIX: Correct method name is 'rejectLeaveById'
+    return this.leavesService.rejectLeaveById(id);
   }
 
-  // ===============================
-  // EMAIL → APPROVE
-  // ===============================
+  // ==========================
+  // APPROVE VIA EMAIL
+  // ==========================
+  @Public()
   @Get('approve')
-  approveByToken(@Query('token') token: string) {
-    return this.leavesService.approveByToken(token);
+  approveByEmail(@Query('token') token: string) {
+    // FIX: Correct method name is 'approveLeaveByToken'
+    return this.leavesService.approveLeaveByToken(token);
   }
 
-  // ===============================
-  // EMAIL → REJECT
-  // ===============================
+  // ==========================
+  // REJECT VIA EMAIL
+  // ==========================
+  @Public()
   @Get('reject')
-  rejectByToken(@Query('token') token: string) {
-    return this.leavesService.rejectByToken(token);
+  rejectByEmail(@Query('token') token: string) {
+    // FIX: Correct method name is 'rejectLeaveByToken'
+    return this.leavesService.rejectLeaveByToken(token);
   }
 
-  // ===============================
-  // CALENDAR → BY DATE
-  // ===============================
-  @UseGuards(JwtAuthGuard)
+  // ==========================
+  // EMPLOYER – CALENDAR VIEW
+  // ==========================
   @Get('by-date')
   getLeavesByDate(@Query('date') date: string) {
-    return this.leavesService.getLeavesByDate(new Date(date));
+    // FIX: Pass string directly. Service handles conversion.
+    return this.leavesService.getLeavesByDate(date);
   }
 
-  // ===============================
-  // HISTORY
-  // ===============================
-  @UseGuards(JwtAuthGuard)
-  @Get('history')
-  getMyHistory(@Req() req) {
-    return this.leavesService.getEmployeeHistory(req.user.userId);
+  // ==========================
+  // EMPLOYER – FULL LEAVE HISTORY
+  // ==========================
+  @Get('history/all')
+  getAllLeaveHistory() {
+    return this.leavesService.getAllLeaveHistory();
   }
 }
