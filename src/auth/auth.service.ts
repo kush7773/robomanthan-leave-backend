@@ -15,7 +15,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly mailService: MailService,
-  ) {}
+  ) { }
 
   // ==========================
   // LOGIN (BLOCK INACTIVE USERS)
@@ -66,7 +66,7 @@ export class AuthService {
 
   // ... (Keep the rest of your existing methods: forgotPassword, resetPassword, etc.)
   // Just Copy/Paste the rest of your original file here
-  
+
   async forgotPassword(email: string) {
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -128,6 +128,10 @@ export class AuthService {
   }
 
   private validatePassword(password: string) {
+    if (!password) {
+      throw new BadRequestException('Password is required');
+    }
+
     const strong =
       password.length >= 8 &&
       /[A-Z]/.test(password) &&
@@ -137,8 +141,36 @@ export class AuthService {
 
     if (!strong) {
       throw new BadRequestException(
-        'Password must contain uppercase, lowercase, number & symbol',
+        'Password must be at least 8 characters and contain uppercase, lowercase, number & symbol',
       );
     }
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Verify current password
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Validate new password
+    this.validatePassword(newPassword);
+
+    // Hash and update password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 }

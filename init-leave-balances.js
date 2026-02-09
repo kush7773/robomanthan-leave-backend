@@ -28,7 +28,7 @@ async function main() {
                 console.log(`Found ${employees.length} active employees\n`);
 
                 const currentYear = new Date().getFullYear();
-                const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave'];
+                const leaveTypes = ['Sick', 'Casual', 'Paid'];
                 let initialized = 0;
                 let skipped = 0;
 

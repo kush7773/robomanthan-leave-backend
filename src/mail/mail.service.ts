@@ -11,6 +11,12 @@ export class MailService {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    // Force IPv4 to avoid IPv6 connection issues
+    family: 4,
+    dnsTimeout: 5000,
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
 
   // ==========================

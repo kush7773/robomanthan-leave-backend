@@ -1,4 +1,4 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -26,7 +26,12 @@ export class AuthController {
 
   @Public()
   @Post('reset-password')
-  resetPassword(@Body() body: any) {
+  resetPassword(@Body() body: { token: string; newPassword: string }) {
     return this.authService.resetPassword(body.token, body.newPassword);
+  }
+
+  @Post('change-password')
+  changePassword(@Req() req, @Body() body: { currentPassword: string; newPassword: string }) {
+    return this.authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
   }
 }

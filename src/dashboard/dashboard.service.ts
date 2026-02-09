@@ -62,6 +62,21 @@ export class DashboardService {
       },
     });
 
+    // Get leave history
+    const leaves = await this.prisma.leave.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        type: true,
+        fromDate: true,
+        toDate: true,
+        status: true,
+        reason: true,
+        createdAt: true,
+      },
+    });
+
     return {
       year,
       totalLeaves,
@@ -74,6 +89,7 @@ export class DashboardService {
         used: lb.used,
         remaining: lb.total - lb.used,
       })),
+      leaves,
     };
   }
 }

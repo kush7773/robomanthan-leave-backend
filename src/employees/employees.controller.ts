@@ -17,7 +17,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('EMPLOYER')
 export class EmployeesController {
-  constructor(private readonly service: EmployeesService) {}
+  constructor(private readonly service: EmployeesService) { }
 
   @Post()
   createEmployee(@Body() body) {
@@ -32,6 +32,19 @@ export class EmployeesController {
   @Get(':id')
   getEmployeeById(@Param('id') id: string) {
     return this.service.getEmployeeById(id);
+  }
+
+  @Get(':id/leaves')
+  getEmployeeLeaves(@Param('id') id: string) {
+    return this.service.getEmployeeLeaves(id);
+  }
+
+  @Put(':id/leave-balances')
+  updateLeaveBalances(
+    @Param('id') id: string,
+    @Body() body: { leaveBalances: Array<{ type: string; total: number }> },
+  ) {
+    return this.service.updateLeaveBalances(id, body.leaveBalances);
   }
 
   @Put(':id')

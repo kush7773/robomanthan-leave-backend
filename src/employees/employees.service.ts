@@ -1,10 +1,15 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService,
+  ) { }
 
   // ==============================
   // CREATE EMPLOYEE (EMPLOYER)
@@ -12,9 +17,10 @@ export class EmployeesService {
   async createEmployee(data: {
     name: string;
     email: string;
-    password: string;
+    password?: string;
     jobRole?: string;
     phone?: string;
+    balances?: Array<{ type: string; total: number }>;
   }) {
     const existing = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -24,11 +30,9 @@ export class EmployeesService {
       throw new BadRequestException('Employee already exists');
     }
 
-    if (!data.password) {
-      throw new BadRequestException('Password is required');
-    }
-
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    // Auto-generate password if not provided
+    const plainPassword = data.password || randomBytes(8).toString('hex');
+    const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
     const currentYear = new Date().getFullYear();
     const employee = await this.prisma.user.create({
@@ -52,21 +56,32 @@ export class EmployeesService {
       },
     });
 
-    // Initialize leave balances for common leave types
-    const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave'];
+    // Initialize leave balances
+    // Use custom balances if provided, otherwise use defaults
+    const leaveBalances = data.balances && data.balances.length > 0
+      ? data.balances
+      : [
+        { type: 'Sick', total: 20 },
+        { type: 'Casual', total: 20 },
+        { type: 'Paid', total: 20 },
+      ];
+
     await Promise.all(
-      leaveTypes.map(type =>
+      leaveBalances.map(balance =>
         this.prisma.leaveBalance.create({
           data: {
             userId: employee.id,
-            type,
-            total: 20, // Default 20 days per leave type per year
+            type: balance.type,
+            total: balance.total,
             used: 0,
             year: currentYear,
           },
         }),
       ),
     );
+
+    // Send credentials via email
+    await this.mailService.sendEmployeeCredentials(data.email, plainPassword);
 
     return employee;
   }
@@ -96,6 +111,8 @@ export class EmployeesService {
   // GET EMPLOYEE BY ID
   // ==============================
   async getEmployeeById(id: string) {
+    const currentYear = new Date().getFullYear();
+
     const employee = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -106,6 +123,14 @@ export class EmployeesService {
         jobRole: true,
         isActive: true,
         createdAt: true,
+        leaveBalances: {
+          where: { year: currentYear },
+          select: {
+            type: true,
+            total: true,
+            used: true,
+          },
+        },
       },
     });
 
@@ -114,6 +139,113 @@ export class EmployeesService {
     }
 
     return employee;
+  }
+
+  // ==============================
+  // GET EMPLOYEE LEAVES BY ID
+  // ==============================
+  async getEmployeeLeaves(id: string) {
+    const employee = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!employee || employee.role !== 'EMPLOYEE') {
+      throw new NotFoundException('Employee not found');
+    }
+
+    return this.prisma.leave.findMany({
+      where: { userId: id },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        type: true,
+        reason: true,
+        fromDate: true,
+        toDate: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  // ==============================
+  // UPDATE EMPLOYEE LEAVE BALANCES
+  // ==============================
+  async updateLeaveBalances(
+    id: string,
+    leaveBalances: Array<{ type: string; total: number; used?: number }>,
+  ) {
+    const employee = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!employee || employee.role !== 'EMPLOYEE') {
+      throw new NotFoundException('Employee not found');
+    }
+
+    // Validate leave balances
+    for (const balance of leaveBalances) {
+      if (balance.total < 0) {
+        throw new BadRequestException('Total leave balance cannot be negative');
+      }
+      if (balance.used !== undefined && balance.used < 0) {
+        throw new BadRequestException('Used leave balance cannot be negative');
+      }
+      if (balance.used !== undefined && balance.used > balance.total) {
+        throw new BadRequestException('Used leaves cannot exceed total leaves');
+      }
+    }
+
+    const currentYear = new Date().getFullYear();
+
+    // Update each leave balance
+    await Promise.all(
+      leaveBalances.map(async (balance) => {
+        const existing = await this.prisma.leaveBalance.findUnique({
+          where: {
+            userId_type: {
+              userId: id,
+              type: balance.type,
+            },
+          },
+        });
+
+        if (existing) {
+          // Update existing balance
+          const updateData: any = {
+            total: balance.total,
+          };
+
+          // Only update 'used' if it's provided
+          if (balance.used !== undefined) {
+            updateData.used = balance.used;
+          }
+
+          return this.prisma.leaveBalance.update({
+            where: {
+              userId_type: {
+                userId: id,
+                type: balance.type,
+              },
+            },
+            data: updateData,
+          });
+        } else {
+          // Create new balance if it doesn't exist
+          return this.prisma.leaveBalance.create({
+            data: {
+              userId: id,
+              type: balance.type,
+              total: balance.total,
+              used: 0,
+              year: currentYear,
+            },
+          });
+        }
+      }),
+    );
+
+    return { message: 'Leave balances updated successfully' };
   }
 
   // ==============================

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { APP_GUARD } from '@nestjs/core';
 
+import { AppController } from './app.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { EmployeesModule } from './employees/employees.module';
@@ -37,6 +38,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     ProfileModule,
     ReportsModule,
   ],
+
+  controllers: [AppController],
 
   providers: [
     // 🔥 GLOBAL AUTH GUARDS (ORDER MATTERS)

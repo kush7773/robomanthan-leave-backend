@@ -5,12 +5,9 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for frontend
+  // Enable CORS for frontend (including ngrok)
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:5173', // Vite
-    ],
+    origin: true, // Allow all origins (for ngrok and development)
     credentials: true,
   });
 
