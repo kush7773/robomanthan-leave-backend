@@ -253,6 +253,21 @@ export class LeavesService {
       );
     }
 
+    // For APPROVED leaves, block withdrawal if the leave has already started
+    if (leave.status === LeaveStatus.APPROVED) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // compare date only, ignore time
+
+      const leaveStart = new Date(leave.fromDate);
+      leaveStart.setHours(0, 0, 0, 0);
+
+      if (leaveStart <= today) {
+        throw new BadRequestException(
+          'Cannot withdraw an approved leave that has already started',
+        );
+      }
+    }
+
     const wasApproved = leave.status === LeaveStatus.APPROVED;
 
     await this.prisma.leave.update({
