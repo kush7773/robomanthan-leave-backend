@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Get,
   Body,
   Param,
@@ -106,5 +107,13 @@ export class LeavesController {
   @Get('history/all')
   getAllLeaveHistory() {
     return this.leavesService.getAllLeaveHistory();
+  }
+
+  // ==========================
+  // EMPLOYEE – WITHDRAW LEAVE
+  // ==========================
+  @Patch(':id/withdraw')
+  withdrawLeave(@Req() req, @Param('id') id: string) {
+    return this.leavesService.withdrawLeave(id, req.user.userId);
   }
 }

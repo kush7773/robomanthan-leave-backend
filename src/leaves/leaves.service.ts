@@ -226,4 +226,71 @@ export class LeavesService {
       orderBy: { fromDate: 'desc' },
     });
   }
+
+  // ==========================
+  // EMPLOYEE – WITHDRAW LEAVE
+  // ==========================
+  async withdrawLeave(leaveId: string, userId: string) {
+    const leave = await this.prisma.leave.findUnique({
+      where: { id: leaveId },
+      include: { user: true },
+    });
+
+    if (!leave) {
+      throw new NotFoundException('Leave request not found');
+    }
+
+    if (leave.userId !== userId) {
+      throw new BadRequestException('You can only withdraw your own leave requests');
+    }
+
+    if (
+      leave.status !== LeaveStatus.PENDING &&
+      leave.status !== LeaveStatus.APPROVED
+    ) {
+      throw new BadRequestException(
+        'Only pending or approved leave requests can be withdrawn',
+      );
+    }
+
+    const wasApproved = leave.status === LeaveStatus.APPROVED;
+
+    await this.prisma.leave.update({
+      where: { id: leaveId },
+      data: {
+        status: LeaveStatus.WITHDRAWN,
+        approvalToken: null,
+      },
+    });
+
+    // If the leave was already approved, restore the balance
+    if (wasApproved) {
+      const days =
+        Math.ceil(
+          (leave.toDate.getTime() - leave.fromDate.getTime()) /
+            (1000 * 60 * 60 * 24),
+        ) + 1;
+
+      await this.prisma.leaveBalance.updateMany({
+        where: {
+          userId: leave.userId,
+          type: leave.type,
+        },
+        data: {
+          used: { decrement: days },
+        },
+      });
+    }
+
+    // Notify HR that the employee cancelled the request
+    await this.mailService.sendLeaveWithdrawnToApprover({
+      employeeName: leave.user.name,
+      employeeEmail: leave.user.email,
+      type: leave.type,
+      fromDate: leave.fromDate,
+      toDate: leave.toDate,
+    });
+
+    return { message: 'Leave request withdrawn successfully' };
+  }
 }

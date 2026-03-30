@@ -99,4 +99,27 @@ export class MailService {
       `,
     });
   }
+
+  // ==========================
+  // 5️⃣ LEAVE WITHDRAWN → HR
+  // ==========================
+  async sendLeaveWithdrawnToApprover(data: {
+    employeeName: string;
+    employeeEmail: string;
+    type: string;
+    fromDate: Date;
+    toDate: Date;
+  }) {
+    await this.transporter.sendMail({
+      to: process.env.HR_EMAIL,
+      subject: 'Leave Request Withdrawn',
+      html: `
+        <p><b>${data.employeeName}</b> (${data.employeeEmail}) has <b>withdrawn</b> their leave request.</p>
+        <p><b>Type:</b> ${data.type}</p>
+        <p><b>From:</b> ${data.fromDate.toDateString()}</p>
+        <p><b>To:</b> ${data.toDate.toDateString()}</p>
+        <p>No action is required.</p>
+      `,
+    });
+  }
 }
